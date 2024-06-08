@@ -82,3 +82,18 @@ If you are not running as root you might need to use "sudo apt" instead
     export OPENSSL_CONF=$BUILD_DIR/ssl/openssl.cnf
     export OPENSSL_MODULES=$BUILD_DIR/lib
     $BUILD_DIR/bin/openssl list -providers -verbose -provider oqsprovider
+
+# -----Set up define the environment variables-----
+
+    nano $HOME/.bashrc
+
+Add the following line
+
+    export WORKSPACE=$HOME/quantumsafe
+    export BUILD_DIR=$WORKSPACE/build
+    export OPENSSL_CONF=$BUILD_DIR/ssl/openssl.cnf
+    export OPENSSL_MODULES=$BUILD_DIR/lib
+
+run
+
+    source $HOME/.bashrc
