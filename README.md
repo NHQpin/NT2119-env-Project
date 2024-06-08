@@ -13,6 +13,12 @@ If you are not running as root you might need to use "sudo apt" instead
     mkdir -p $BUILD_DIR/lib64
     ln -s $BUILD_DIR/lib64 $BUILD_DIR/lib
 
+# -----copy file-----
+
+    cp NT2119-env-Project/openssl-openssl-3.3.1.tar.gz quantumsafe
+    cp NT2119-env-Project/liboqs-0.10.1.tar.gz quantumsafe
+    cp NT2119-env-Project/oqs-provider-0.6.0.tar.gz quantumsafe
+
 # -----openssl-----
 
     cd $WORKSPACE
