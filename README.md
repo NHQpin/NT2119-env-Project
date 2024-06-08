@@ -37,17 +37,23 @@ If you are not running as root you might need to use "sudo apt" instead
 # -----liboqs-----
 
     cd $WORKSPACE
-    
+
     tar -zxvf liboqs-0.10.1.tar.gz
     cd liboqs-0.10.1
-    
-    ./Configure \
-      --prefix=$BUILD_DIR \
-      no-ssl no-tls1 no-tls1_1 no-afalgeng \
-      no-shared threads -lm
-    
+
+    mkdir build && cd build
+
+    cmake \
+      -DCMAKE_INSTALL_PREFIX=$BUILD_DIR \
+      -DBUILD_SHARED_LIBS=ON \
+      -DOQS_USE_OPENSSL=OFF \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DOQS_BUILD_ONLY_LIB=ON \
+      -DOQS_DIST_BUILD=ON \
+      ..
+
     make -j $(nproc)
-    make -j $(nproc) install_sw install_ssldirs
+    make -j $(nproc) install
 
 # -----oqs-provider-----
 
