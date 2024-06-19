@@ -75,7 +75,7 @@ class CryptoWrapper():
 
         with oqs.Signature(self.sigalg) as verifier:
 
-            data=data.encode()
+            # data=data.encode()
             is_valid = verifier.verify(data, signature, publicKey)
 
             return is_valid

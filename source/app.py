@@ -59,6 +59,18 @@ def init_db():
             pubkeys NVARCHAR(MAX) NOT NULL,
         )
     ''')
+    cursor.execute('''
+        IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'shared_files')
+        CREATE TABLE shared_files (
+            share_id INT IDENTITY(1,1) PRIMARY KEY,
+            owner_id INT NOT NULL,
+            file_id INT NOT NULL,
+            shared_with_id INT NOT NULL,
+            FOREIGN KEY (owner_id) REFERENCES users(user_id),
+            FOREIGN KEY (file_id) REFERENCES files(file_id),
+            FOREIGN KEY (shared_with_id) REFERENCES users(user_id)
+        )
+    ''')
     conn.commit()
     cursor.close()
     conn.close()
@@ -77,19 +89,16 @@ def encrypt_file(file_path, key_file, output_path):
     key = load_key(key_file)
     with open(file_path, 'rb') as f:
         data = f.read()
-
     ciphertext = encrypt(key, data)
-    
     with open(output_path, 'wb') as f:
         f.write(ciphertext.encode('utf-8'))
 
 def decrypt_file(file_path, key_file, output_path):
     key = load_key(key_file)
     with open(file_path, 'rb') as f:
-        ciphertext = f.read()
-        
-    data = decrypt(key, ciphertext)
-
+        ciphertext = f.read() 
+    decoded = ciphertext.decode('utf-8')   
+    data = decrypt(key, decoded)
     with open(output_path, 'wb') as f:
         f.write(data)
 
@@ -98,13 +107,14 @@ def sign_file(file_path, private_key_file):
         data = f.read()
     key = load_key(private_key_file)
     signature = gen_sig(key, data)
-    return signature
+    return signature.hex()
+    
 
 def verify_signature(file_path, signature, public_key_file):
     with open(file_path, 'rb') as f:
         data = f.read()
     key = load_key(public_key_file)
-    isValid = verify_sig(key, data, signature)
+    isValid = verify_sig(key, data, bytes.fromhex(signature))
     return isValid
 
 @app.route('/')
@@ -115,6 +125,8 @@ def index():
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
+    if 'user_id' in session:
+        return redirect(url_for('list_files'))
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
@@ -137,6 +149,8 @@ def register():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    if 'user_id' in session:
+        return redirect(url_for('list_files'))
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
@@ -161,13 +175,13 @@ def login():
 def logout():
     session.pop('user_id', None)
     flash('You have been logged out.')
-    return redirect(url_for('index'))
+    return redirect(url_for('list_files'))
 
 @app.route('/upload', methods=['GET', 'POST'])
 def upload_file():
     if 'user_id' not in session:
         flash('Please log in to upload files.')
-        return redirect(url_for('login'))
+        return redirect(url_for('files'))
     
     if request.method == 'POST':
         if 'file' not in request.files:
@@ -183,9 +197,9 @@ def upload_file():
             file.save(filepath)
             
             encrypted_filepath = os.path.join(app.config['UPLOAD_FOLDER'], f'encrypted_{filename}')
-            encrypt_file(filepath, 'prisecretkey.pem', encrypted_filepath)
+            encrypt_file(filepath, 'key/prisecretkey.pem', encrypted_filepath)
             
-            signature = sign_file(encrypted_filepath, 'priSignKey.pem')
+            signature = sign_file(encrypted_filepath, 'key/priSignKey.pem')
             
             save_to_db(filename, encrypted_filepath, session['user_id'], signature)
             os.remove(filepath)
@@ -195,11 +209,40 @@ def upload_file():
     
     return render_template('upload.html')
 
+@app.route('/share/<int:file_id>/<int:user_id>', methods=['POST'])
+def sharefile(file_id, user_id):
+    if 'user_id' not in session:
+        flash('Please log in to share files.')
+        return redirect(url_for('login'))
+    
+    # Verify if the logged in user has permission to share this file
+    conn = pyodbc.connect(conn_str)
+    cursor = conn.cursor()
+    cursor.execute('SELECT user_id FROM files WHERE file_id = ?', (file_id,))
+    file_owner_id = cursor.fetchone()[0]
+    
+    if session['user_id'] != file_owner_id:
+        flash('You do not have permission to share this file.')
+        return redirect(url_for('list_files'))
+    
+    try:
+        cursor.execute('INSERT INTO shared_files (file_id, shared_by_user_id, shared_with_user_id) VALUES (?, ?, ?)',
+                       (file_id, session['user_id'], user_id))
+        conn.commit()
+        flash('File shared successfully.')
+    except Exception as e:
+        flash(f"Error sharing file: {str(e)}")
+    finally:
+        cursor.close()
+        conn.close()
+    
+    return redirect(url_for('list_files'))
+    
 @app.route('/files')
 def list_files():
     if 'user_id' not in session:
         flash('Please log in to view files.')
-        return redirect(url_for('login'))
+        return redirect(url_for('index'))
     
     file_list = fetch_files_from_db(session['user_id'])
     return render_template('files.html', file_list=file_list)
@@ -208,7 +251,7 @@ def list_files():
 def download_file(file_id):
     if 'user_id' not in session:
         flash('Please log in to download files.')
-        return redirect(url_for('login'))
+        return redirect(url_for('index'))
     
     conn = pyodbc.connect(conn_str)
     cursor = conn.cursor()
@@ -222,11 +265,11 @@ def download_file(file_id):
         file_path = file_record[1]
         signature = file_record[2]
         
-        if verify_signature(file_path, signature, 'pubSignKey.pem'):
+        if verify_signature(file_path, signature, 'key/pubSignKey.pem'):
             decrypted_filepath = os.path.join(app.config['UPLOAD_FOLDER'], f'decrypted_{file_name}')
-            decrypt_file(file_path, 'prisecretkey.pem', decrypted_filepath)
+            decrypt_file(file_path, 'key/prisecretkey.pem', decrypted_filepath)
             try:
-                return send_from_directory(directory=app.config['UPLOAD_FOLDER'], filename=f'decrypted_{file_name}', as_attachment=True)
+                return send_from_directory(directory=app.config['UPLOAD_FOLDER'], path=f'decrypted_{file_name}', as_attachment=True)
             except Exception as e:
                 flash(f"Error downloading file: {str(e)}")
                 return redirect(url_for('list_files'))
@@ -241,7 +284,7 @@ def download_file(file_id):
 def delete_file(file_id):
     if 'user_id' not in session:
         flash('Please log in to delete files.')
-        return redirect(url_for('login'))
+        return redirect(url_for('index'))
     
     conn = pyodbc.connect(conn_str)
     cursor = conn.cursor()
@@ -281,6 +324,10 @@ def save_to_db(filename, filepath, user_id, signature):
     cursor.close()
     conn.close()
 
+
+@app.errorhandler(404)
+def page_not_found(e):
+    return redirect(url_for('login'))
 if __name__ == '__main__':
     if not os.path.exists(app.config['UPLOAD_FOLDER']):
         os.makedirs(app.config['UPLOAD_FOLDER'])

@@ -22,7 +22,7 @@ def decrypt(key, cipher):
     """decrypt cipher using given key and return plain text values 
     """
     crypto = CryptoWrapper()
-    plain_text = crypto.aesDecrypt(key, cipher).decode()
+    plain_text = crypto.aesDecrypt(key, cipher)#.decode()
     # print(plain_text)
     if type(plain_text) is bytes:
         plain_text = eval(plain_text)

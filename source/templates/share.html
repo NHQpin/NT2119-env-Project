@@ -1,0 +1,18 @@
+<!-- templates/share.html -->
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Share File</title>
+</head>
+<body>
+    <h1>Share File</h1>
+    <form method="POST">
+        <label for="username">Share with (username):</label>
+        <input type="text" id="username" name="username" required>
+        <input type="hidden" name="file_id" value="{{ file_id }}">
+        <button type="submit">Share</button>
+    </form>
+    <a href="{{ url_for('list_files') }}">Back to file list</a>
+</body>
+</html>
