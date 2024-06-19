@@ -1,0 +1,1 @@
+set PYTHONPATH=%PYTHONPATH%;D:\Hoc_tap\Ki_6\Cryptography\Projects\testdb\liboqs-python
